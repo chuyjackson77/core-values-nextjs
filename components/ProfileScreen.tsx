@@ -60,12 +60,6 @@ export function ProfileScreen({
   console.error('Email service error:', result.error);
 }        
         
-        // Mark as success and continue
-        setSubmissionState('success');
-        setTimeout(() => {
-          onSubmit(formData);
-        }, 1000);
-      }
     } catch (error) {
       setSubmissionState('error');
       setErrorMessage('An unexpected error occurred. Please try again.');
