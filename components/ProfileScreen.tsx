@@ -53,19 +53,12 @@ export function ProfileScreen({
           onSubmit(formData);
         }, 1500);
         
-      } else {
-        // Fallback to email client if backend isn't configured
-        console.log('Using fallback email method');
-        
-        // Generate mailto link with assessment results
-        const emailContent = generateEmailContent(formData, topValues, selectedCategories, selectedCoachingPackage);
-        const mailtoLink = `mailto:cory@youdoyou.boo?${new URLSearchParams({
-          subject: `New Core Values Assessment${selectedCoachingPackage ? ` - Interested in ${selectedCoachingPackage}` : ''} - ${formData.name || 'Anonymous User'}`,
-          body: emailContent
-        }).toString()}`;
-        
-        // Open email client
-        window.open(mailtoLink, '_blank');
+} else {
+  // Show the actual error instead of falling back
+  setSubmissionState('error');
+  setErrorMessage(result.error || 'Failed to send email. Please try again or contact cory@youdoyou.boo directly.');
+  console.error('Email service error:', result.error);
+}        
         
         // Mark as success and continue
         setSubmissionState('success');
