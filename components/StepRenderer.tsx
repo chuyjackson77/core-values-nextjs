@@ -12,7 +12,6 @@ import { ThankYouScreen } from '@/components/ThankYouScreen';
 
 import { CoreValue, UserProfile, AppStep, AssessmentPhase } from '@/types';
 import { CORE_VALUES } from '@/data/coreValues';
-import { getCategories } from '@/utils/assessmentHelpers';
 import { getCurrentGroup, getCurrentRoundNumber, getTotalRounds } from '@/utils/groupHelpers';
 import { handleCategorySelection, handleValueSelection, completeAssessment } from '@/utils/assessmentLogic';
 
@@ -80,10 +79,22 @@ export function StepRenderer(props: StepRendererProps) {
     case 'selection':
       // Show category selection first
       if (selectedCategories.length === 0) {
+        // Get one representative value from each category
+        const categoryRepresentatives = CORE_VALUES.filter((v, i, arr) => 
+          arr.findIndex(val => val.category === v.category) === i
+        );
+        
         return (
           <CategorySelectionScreen 
-            categories={getCategories(CORE_VALUES)}
-            onSelectCategories={handleCategorySelectionWrapper}
+            categories={categoryRepresentatives}
+            round={1}
+            totalRounds={1}
+            onSelect={(categoryId) => {
+              const selectedValue = CORE_VALUES.find(v => v.id === categoryId);
+              if (selectedValue) {
+                handleCategorySelectionWrapper([selectedValue.category]);
+              }
+            }}
             onBack={() => onNavigateToStep('instructions')}
           />
         );

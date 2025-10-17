@@ -80,25 +80,25 @@ export function SelectionScreen({ values, round, totalRounds, onSelect, onBack, 
         
         <div className="space-y-3">
           {values.map((value) => (
-            <Button
-              key={value.id}
-              variant="outline"
-              className="w-full h-auto p-4 text-left flex items-start space-x-3 hover:bg-[var(--brand-cream)] hover:border-[var(--brand-pink)] transition-all duration-200"
-              onClick={() => onSelect(value.id)}
-            >
-              <span className="text-2xl">{value.icon}</span>
-              <div className="flex-1 space-y-1">
-                <div className="font-medium" style={{ color: 'var(--brand-navy)' }}>{value.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {value.description}
-                </div>
-                {phase === 'tournament' && (
-                  <div className="text-xs" style={{ color: 'var(--brand-orange)' }}>
-                    {value.category}
-                  </div>
-                )}
-              </div>
-            </Button>
+<Button
+  key={value.id}
+  variant="outline"
+  className="w-full h-auto p-4 text-left flex items-start space-x-3 hover:bg-[var(--brand-cream)] hover:border-[var(--brand-pink)] transition-all duration-200"
+  onClick={() => onSelect(value.id)}
+>
+  <span className="text-2xl sm:text-2xl flex-shrink-0">{value.icon}</span>
+  <div className="flex-1 space-y-1 min-w-0">
+    <div className="font-medium text-sm sm:text-base" style={{ color: 'var(--brand-navy)' }}>{value.name}</div>
+    <div className="text-xs sm:text-sm text-muted-foreground leading-tight">
+      {value.description}
+    </div>
+    {phase === 'tournament' && (
+      <div className="text-xs" style={{ color: 'var(--brand-orange)' }}>
+        {value.category}
+      </div>
+    )}
+  </div>
+</Button>
           ))}
         </div>
       </Card>

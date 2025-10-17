@@ -1,109 +1,70 @@
 'use client'
-
-import React, { useState } from 'react';
+import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { ArrowLeft } from 'lucide-react';
+import { CoreValue } from '@/types';
 
 interface CategorySelectionScreenProps {
-  categories: string[];
-  onSelectCategories: (categories: string[]) => void;
+  categories: CoreValue[];
+  round: number;
+  totalRounds: number;
+  onSelect: (categoryId: string) => void;
   onBack: () => void;
 }
 
-export function CategorySelectionScreen({ categories, onSelectCategories, onBack }: CategorySelectionScreenProps) {
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-
-  const toggleCategory = (category: string) => {
-    setSelectedCategories(prev => 
-      prev.includes(category) 
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-    );
-  };
-
-  const handleContinue = () => {
-    if (selectedCategories.length >= 2) {
-      onSelectCategories(selectedCategories);
-    }
-  };
-
-  const categoryDescriptions: Record<string, string> = {
-    'Personal Growth': 'Self-improvement, achievement, and individual development',
-    'Relationships': 'Connection, community, and interpersonal bonds', 
-    'Work & Career': 'Professional success, leadership, and work excellence',
-    'Values & Ethics': 'Moral principles, integrity, and doing what\'s right',
-    'Lifestyle': 'How you live, personal freedom, and life balance',
-    'Wisdom & Character': 'Personal virtues, wisdom, and character traits'
-  };
-
-  const categoryIcons: Record<string, string> = {
-    'Personal Growth': '🌱',
-    'Relationships': '🤝',
-    'Work & Career': '💼',
-    'Values & Ethics': '⚖️',
-    'Lifestyle': '🌟',
-    'Wisdom & Character': '🦉'
-  };
+export function CategorySelectionScreen({ 
+  categories, 
+  round, 
+  totalRounds, 
+  onSelect, 
+  onBack 
+}: CategorySelectionScreenProps) {
+  const progress = (round / totalRounds) * 100;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, var(--brand-cream) 0%, #ffffff 100%)' }}>
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'linear-gradient(135deg, #ffffff 0%, var(--brand-cream) 100%)' }}>
       <Card className="w-full max-w-md p-8 space-y-6 border-0 shadow-xl">
         <div className="flex items-center space-x-2">
           <Button variant="ghost" size="sm" onClick={onBack} className="hover:bg-[var(--brand-cream)]">
             <ArrowLeft className="w-4 h-4" />
           </Button>
-          <h1 className="text-xl font-medium" style={{ color: 'var(--brand-navy)' }}>Choose Your Focus Areas</h1>
+          <div className="flex-1">
+            <div className="text-xs text-muted-foreground mb-1">
+              Category Selection • Round {round} of {totalRounds}
+            </div>
+            <Progress value={progress} className="h-3" />
+          </div>
         </div>
         
         <div className="text-center space-y-4">
           <div className="text-4xl">🎯</div>
-          <p className="text-sm text-muted-foreground">
-            Select 2-4 categories that matter most to you. This helps us focus on the values most relevant to your life.
+          <h1 className="text-xl font-medium" style={{ color: 'var(--brand-navy)' }}>
+            Which category resonates with you most?
+          </h1>
+          <p className="text-xs text-muted-foreground">
+            Choose the category that best represents your core values.
           </p>
         </div>
         
         <div className="space-y-3">
           {categories.map((category) => (
             <Button
-              key={category}
+              key={category.id}
               variant="outline"
-              onClick={() => toggleCategory(category)}
-              className={`w-full h-auto p-4 text-left flex items-start space-x-3 transition-all duration-200 ${
-                selectedCategories.includes(category)
-                  ? 'border-[var(--brand-pink)] bg-[var(--brand-pink)]/10 hover:bg-[var(--brand-pink)]/20'
-                  : 'hover:bg-[var(--brand-cream)] hover:border-[var(--brand-orange)]'
-              }`}
+              className="w-full h-auto p-4 text-left flex items-start space-x-3 hover:bg-[var(--brand-cream)] hover:border-[var(--brand-pink)] transition-all duration-200"
+              onClick={() => onSelect(category.id)}
             >
-              <span className="text-2xl">{categoryIcons[category] || '📋'}</span>
-              <div className="flex-1 space-y-1">
-                <div className="font-medium" style={{ color: 'var(--brand-navy)' }}>{category}</div>
-                <div className="text-xs text-muted-foreground">
-                  {categoryDescriptions[category] || 'Important life values and principles'}
+              <span className="text-2xl sm:text-2xl flex-shrink-0">{category.icon}</span>
+              <div className="flex-1 space-y-1 min-w-0">
+                <div className="font-medium text-sm sm:text-base" style={{ color: 'var(--brand-navy)' }}>{category.name}</div>
+                <div className="text-xs sm:text-sm text-muted-foreground leading-tight">
+                  {category.description}
                 </div>
               </div>
-              {selectedCategories.includes(category) && (
-                <div className="text-[var(--brand-pink)]">✓</div>
-              )}
             </Button>
           ))}
-        </div>
-        
-        <div className="space-y-3">
-          <Button 
-            onClick={handleContinue}
-            disabled={selectedCategories.length < 2}
-            className={`w-full transition-all duration-200 ${
-              selectedCategories.length >= 2
-                ? 'bg-[var(--brand-pink)] hover:bg-[var(--brand-pink)]/90 text-white'
-                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            Continue with {selectedCategories.length} categories
-          </Button>
-          <p className="text-xs text-center text-muted-foreground">
-            Select at least 2 categories to continue
-          </p>
         </div>
       </Card>
     </div>
