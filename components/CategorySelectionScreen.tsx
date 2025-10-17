@@ -53,11 +53,11 @@ export function CategorySelectionScreen({
 <Button
   key={category.id}
   variant="outline"
-  className="w-full h-auto min-h-[80px] p-4 text-left flex items-start space-x-3 hover:bg-[var(--brand-cream)] hover:border-[var(--brand-pink)] transition-all duration-200"
+  className="w-full h-auto min-h-[80px] p-4 text-left flex items-start space-x-3 hover:bg-[var(--brand-cream)] hover:border-[var(--brand-pink)] transition-all duration-200 whitespace-normal"
   onClick={() => onSelect(category.id)}
 >
   <span className="text-2xl flex-shrink-0 mt-1">{category.icon}</span>
-  <div className="flex-1 space-y-1 min-w-0">
+  <div className="flex-1 space-y-1 min-w-0 overflow-hidden">
     <div className="font-medium text-base leading-snug break-words" style={{ color: 'var(--brand-navy)' }}>
       {category.name}
     </div>
