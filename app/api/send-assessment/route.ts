@@ -42,7 +42,7 @@ This email was automatically generated from youdoyou.boo/core-values-assessment
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        from: 'Core Values Assessment <onboarding@resend.dev>',
+        from: 'Core Values Assessment <assessment@youdoyou.boo>',
         to: [process.env.NEXT_PUBLIC_COACH_EMAIL || 'cory@youdoyou.boo'],
         subject: `New Core Values Assessment${selectedCoachingPackage ? ` - Interested in ${selectedCoachingPackage}` : ''} - ${userProfile.name || 'Anonymous User'}`,
         text: emailContent,
