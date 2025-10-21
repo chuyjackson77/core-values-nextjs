@@ -80,20 +80,18 @@ export function StepRenderer(props: StepRendererProps) {
       // Show category selection first
       if (selectedCategories.length === 0) {
         // Get one representative value from each category
-        const categoryRepresentatives = CORE_VALUES.filter((v, i, arr) => 
+        const categoryRepresentatives = CORE_VALUES.filter((v, i, arr) =>
           arr.findIndex(val => val.category === v.category) === i
         );
-        
+
         return (
-          <CategorySelectionScreen 
+          <CategorySelectionScreen
             categories={categoryRepresentatives}
             round={1}
             totalRounds={1}
-            onSelect={(categoryId) => {
-              const selectedValue = CORE_VALUES.find(v => v.id === categoryId);
-              if (selectedValue) {
-                handleCategorySelectionWrapper([selectedValue.category]);
-              }
+            onSelect={(categoryNames) => {
+              // categoryNames is now an array of category names
+              handleCategorySelectionWrapper(categoryNames);
             }}
             onBack={() => onNavigateToStep('instructions')}
           />
