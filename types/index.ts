@@ -9,6 +9,10 @@ export type CoreValue = {
   appearances?: number;   // Number of times this value was shown in comparisons
   winRate?: number;       // Calculated as wins / appearances (0.0 - 1.0)
   wilsonScore?: number;   // Wilson score with 95% confidence (for ranking)
+  confidenceInterval?: {  // 95% confidence interval for win rate
+    lower: number;
+    upper: number;
+  };
   // Legacy field - kept for backward compatibility
   score?: number;
 };
