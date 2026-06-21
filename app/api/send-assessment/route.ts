@@ -5,12 +5,112 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { userProfile, topValues, selectedCategories, selectedCoachingPackage } = body;
 
-    // Generate email content
-    const valuesText = topValues
-      .map((value: any, index: number) => `${index + 1}. ${value.name}: ${value.description}`)
-      .join('\n');
+    // Run Systeme.io contact creation and Resend email notification in parallel
+    const [contactResult, emailResult] = await Promise.allSettled([
+      createSystemeContact(userProfile, topValues, selectedCategories, selectedCoachingPackage),
+      sendNotificationEmail(userProfile, topValues, selectedCategories, selectedCoachingPackage),
+    ]);
 
-    const emailContent = `
+    if (contactResult.status === 'rejected') {
+      console.error('Systeme.io contact creation failed:', contactResult.reason);
+    }
+    if (emailResult.status === 'rejected') {
+      console.error('Resend email failed:', emailResult.reason);
+    }
+
+    // Return success as long as at least the email went through
+    const emailOk = emailResult.status === 'fulfilled';
+    return NextResponse.json({
+      success: emailOk,
+      submissionId: emailOk ? (emailResult.value as any).id : undefined,
+      contact: contactResult.status === 'fulfilled' ? 'created' : 'failed',
+    }, { status: emailOk ? 200 : 500 });
+
+  } catch (error) {
+    console.error('API error:', error);
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
+  }
+}
+
+// ─── Systeme.io Contact Creation ──────────────────────────────────────────────
+// Before deploying, create these custom field slugs in Systeme.io:
+//   Contacts → Custom Fields → add each one as type "Text"
+//   core_value_1 | core_value_1_category
+//   core_value_2 | core_value_2_category
+//   core_value_3 | core_value_3_category
+//   coaching_package_interest
+//   focus_categories
+
+async function createSystemeContact(
+  userProfile: any,
+  topValues: any[],
+  selectedCategories: string[],
+  selectedCoachingPackage?: string
+) {
+  const apiKey = process.env.SYSTEME_API_KEY;
+  if (!apiKey) throw new Error('SYSTEME_API_KEY not configured');
+
+  const nameParts = (userProfile.name || '').trim().split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+
+  // Tags applied to the contact in Systeme.io
+  const tags: { name: string }[] = [{ name: 'assessment-completed' }];
+  if (selectedCoachingPackage) {
+    const slug = selectedCoachingPackage
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '');
+    tags.push({ name: `interested-${slug}` });
+  }
+
+  // Custom fields — slugs must match what you created in Systeme.io dashboard
+  const fields = [
+    { slug: 'core_value_1',              value: topValues[0]?.name || '' },
+    { slug: 'core_value_1_category',     value: topValues[0]?.category || '' },
+    { slug: 'core_value_2',              value: topValues[1]?.name || '' },
+    { slug: 'core_value_2_category',     value: topValues[1]?.category || '' },
+    { slug: 'core_value_3',              value: topValues[2]?.name || '' },
+    { slug: 'core_value_3_category',     value: topValues[2]?.category || '' },
+    { slug: 'coaching_package_interest', value: selectedCoachingPackage || 'Not selected' },
+    { slug: 'focus_categories',          value: selectedCategories.join(', ') },
+  ];
+
+  const response = await fetch('https://api.systeme.io/api/contacts', {
+    method: 'POST',
+    headers: {
+      'X-API-Key': apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email: userProfile.email, firstName, lastName, fields, tags }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Systeme.io ${response.status}: ${error}`);
+  }
+
+  return response.json();
+}
+
+// ─── Resend Email Notification ────────────────────────────────────────────────
+
+async function sendNotificationEmail(
+  userProfile: any,
+  topValues: any[],
+  selectedCategories: string[],
+  selectedCoachingPackage?: string
+) {
+  const valuesText = topValues
+    .map((value: any, index: number) =>
+      `${index + 1}. ${value.name} (${value.category}): ${value.description}`
+    )
+    .join('\n');
+
+  const emailContent = `
 NEW CORE VALUES ASSESSMENT SUBMISSION
 =====================================
 
@@ -31,38 +131,29 @@ Top 3 Core Values:
 ${valuesText}
 
 ---
-This email was automatically generated from youdoyou.boo/core-values-assessment
+Contact has been added to Systeme.io with values as custom fields.
+Tags applied: assessment-completed${selectedCoachingPackage ? `, interested-${selectedCoachingPackage.toLowerCase().replace(/\s+/g, '-')}` : ''}
 `;
 
-    // Send email via Resend API
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        from: 'Core Values Assessment <assessment@youdoyou.boo>',
-        to: [process.env.NEXT_PUBLIC_COACH_EMAIL || 'cory@youdoyou.boo'],
-        subject: `New Core Values Assessment${selectedCoachingPackage ? ` - Interested in ${selectedCoachingPackage}` : ''} - ${userProfile.name || 'Anonymous User'}`,
-        text: emailContent,
-      })
-    });
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Core Values Assessment <assessment@youdoyou.boo>',
+      to: [process.env.NEXT_PUBLIC_COACH_EMAIL || 'cory@youdoyou.boo'],
+      subject: `New Assessment: ${userProfile.name || 'Anonymous'}${selectedCoachingPackage ? ` — Interested in ${selectedCoachingPackage}` : ''} — Top Value: ${topValues[0]?.name || 'N/A'}`,
+      text: emailContent,
+    }),
+  });
 
-    const data = await response.json();
+  const data = await response.json();
 
-    if (!response.ok) {
-      console.error('Resend error:', data);
-      return NextResponse.json({ success: false, error: data.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true, submissionId: data.id });
-    
-  } catch (error) {
-    console.error('API error:', error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+  if (!response.ok) {
+    throw new Error(`Resend ${response.status}: ${data.message}`);
   }
+
+  return data;
 }
