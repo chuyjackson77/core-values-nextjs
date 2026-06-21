@@ -5,14 +5,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { userProfile, topValues, selectedCategories, selectedCoachingPackage } = body;
 
-    // Run Systeme.io contact creation and Resend email notification in parallel
+    // Run Systeme.io contact upsert and Resend email notification in parallel
     const [contactResult, emailResult] = await Promise.allSettled([
-      createSystemeContact(userProfile, topValues, selectedCategories, selectedCoachingPackage),
+      upsertSystemeContact(userProfile, topValues, selectedCategories, selectedCoachingPackage),
       sendNotificationEmail(userProfile, topValues, selectedCategories, selectedCoachingPackage),
     ]);
 
     if (contactResult.status === 'rejected') {
-      console.error('Systeme.io contact creation failed:', contactResult.reason);
+      console.error('Systeme.io upsert failed:', contactResult.reason);
     }
     if (emailResult.status === 'rejected') {
       console.error('Resend email failed:', emailResult.reason);
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: emailOk,
       submissionId: emailOk ? (emailResult.value as any).id : undefined,
-      contact: contactResult.status === 'fulfilled' ? 'created' : 'failed',
+      contact: contactResult.status === 'fulfilled' ? contactResult.value : 'failed',
     }, { status: emailOk ? 200 : 500 });
 
   } catch (error) {
@@ -35,16 +35,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ─── Systeme.io Contact Creation ──────────────────────────────────────────────
-// Before deploying, create these custom field slugs in Systeme.io:
-//   Contacts → Custom Fields → add each one as type "Text"
+// ─── Systeme.io Upsert ────────────────────────────────────────────────────────
+// GET-first approach: always look up the contact before deciding to create or update.
+// This ensures retakes always overwrite the contact with the latest assessment results.
+//
+// Custom field slugs required in Systeme.io (Contacts → Custom Fields → add as "Text"):
 //   core_value_1 | core_value_1_category
 //   core_value_2 | core_value_2_category
 //   core_value_3 | core_value_3_category
 //   coaching_package_interest
 //   focus_categories
 
-async function createSystemeContact(
+async function upsertSystemeContact(
   userProfile: any,
   topValues: any[],
   selectedCategories: string[],
@@ -57,7 +59,6 @@ async function createSystemeContact(
   const firstName = nameParts[0] || '';
   const lastName = nameParts.slice(1).join(' ') || '';
 
-  // Tags applied to the contact in Systeme.io
   const tags: { name: string }[] = [{ name: 'assessment-completed' }];
   if (selectedCoachingPackage) {
     const slug = selectedCoachingPackage
@@ -67,7 +68,6 @@ async function createSystemeContact(
     tags.push({ name: `interested-${slug}` });
   }
 
-  // Custom fields — slugs must match what you created in Systeme.io dashboard
   const fields = [
     { slug: 'core_value_1',              value: topValues[0]?.name || '' },
     { slug: 'core_value_1_category',     value: topValues[0]?.category || '' },
@@ -79,37 +79,26 @@ async function createSystemeContact(
     { slug: 'focus_categories',          value: selectedCategories.join(', ') },
   ];
 
-  const payload = { email: userProfile.email, firstName, lastName, fields, tags };
+  // Step 1: Always look up by email first
+  const lookupResponse = await fetch(
+    `https://api.systeme.io/api/contacts?email=${encodeURIComponent(userProfile.email)}`,
+    { headers: { 'X-API-Key': apiKey } }
+  );
 
-  // Try to create the contact first
-  const createResponse = await fetch('https://api.systeme.io/api/contacts', {
-    method: 'POST',
-    headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
+  if (!lookupResponse.ok) {
+    throw new Error(`Systeme.io lookup failed: ${lookupResponse.status}`);
+  }
 
-  // 422 = contact already exists — find by email and update instead
-  if (createResponse.status === 422) {
-    const lookupResponse = await fetch(
-      `https://api.systeme.io/api/contacts?email=${encodeURIComponent(userProfile.email)}`,
-      { headers: { 'X-API-Key': apiKey } }
-    );
+  const lookupData = await lookupResponse.json();
+  const existingId = lookupData?.items?.[0]?.id;
 
-    if (!lookupResponse.ok) {
-      throw new Error(`Systeme.io lookup failed: ${lookupResponse.status}`);
-    }
-
-    const lookupData = await lookupResponse.json();
-    const existingId = lookupData?.items?.[0]?.id;
-
-    if (!existingId) {
-      throw new Error('Systeme.io: contact exists but could not retrieve ID for update');
-    }
-
+  if (existingId) {
+    // Step 2a: Contact exists — update with latest assessment results
+    console.log(`Systeme.io: updating existing contact ${existingId}`);
     const updateResponse = await fetch(`https://api.systeme.io/api/contacts/${existingId}`, {
       method: 'PUT',
       headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ firstName, lastName, fields, tags }),
+      body: JSON.stringify({ email: userProfile.email, firstName, lastName, fields, tags }),
     });
 
     if (!updateResponse.ok) {
@@ -117,15 +106,28 @@ async function createSystemeContact(
       throw new Error(`Systeme.io update failed ${updateResponse.status}: ${error}`);
     }
 
-    return updateResponse.json();
-  }
+    const updateData = await updateResponse.json();
+    console.log('Systeme.io update response:', JSON.stringify(updateData));
+    return 'updated';
 
-  if (!createResponse.ok) {
-    const error = await createResponse.text();
-    throw new Error(`Systeme.io ${createResponse.status}: ${error}`);
-  }
+  } else {
+    // Step 2b: New contact — create
+    console.log('Systeme.io: creating new contact');
+    const createResponse = await fetch('https://api.systeme.io/api/contacts', {
+      method: 'POST',
+      headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: userProfile.email, firstName, lastName, fields, tags }),
+    });
 
-  return createResponse.json();
+    if (!createResponse.ok) {
+      const error = await createResponse.text();
+      throw new Error(`Systeme.io create failed ${createResponse.status}: ${error}`);
+    }
+
+    const createData = await createResponse.json();
+    console.log('Systeme.io create response:', JSON.stringify(createData));
+    return 'created';
+  }
 }
 
 // ─── Resend Email Notification ────────────────────────────────────────────────
@@ -163,7 +165,7 @@ Top 3 Core Values:
 ${valuesText}
 
 ---
-Contact has been added to Systeme.io with values as custom fields.
+Contact has been created or updated in Systeme.io with values as custom fields.
 Tags applied: assessment-completed${selectedCoachingPackage ? `, interested-${selectedCoachingPackage.toLowerCase().replace(/\s+/g, '-')}` : ''}
 `;
 
