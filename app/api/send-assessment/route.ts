@@ -79,21 +79,53 @@ async function createSystemeContact(
     { slug: 'focus_categories',          value: selectedCategories.join(', ') },
   ];
 
-  const response = await fetch('https://api.systeme.io/api/contacts', {
+  const payload = { email: userProfile.email, firstName, lastName, fields, tags };
+
+  // Try to create the contact first
+  const createResponse = await fetch('https://api.systeme.io/api/contacts', {
     method: 'POST',
-    headers: {
-      'X-API-Key': apiKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email: userProfile.email, firstName, lastName, fields, tags }),
+    headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Systeme.io ${response.status}: ${error}`);
+  // 422 = contact already exists — find by email and update instead
+  if (createResponse.status === 422) {
+    const lookupResponse = await fetch(
+      `https://api.systeme.io/api/contacts?email=${encodeURIComponent(userProfile.email)}`,
+      { headers: { 'X-API-Key': apiKey } }
+    );
+
+    if (!lookupResponse.ok) {
+      throw new Error(`Systeme.io lookup failed: ${lookupResponse.status}`);
+    }
+
+    const lookupData = await lookupResponse.json();
+    const existingId = lookupData?.items?.[0]?.id;
+
+    if (!existingId) {
+      throw new Error('Systeme.io: contact exists but could not retrieve ID for update');
+    }
+
+    const updateResponse = await fetch(`https://api.systeme.io/api/contacts/${existingId}`, {
+      method: 'PUT',
+      headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstName, lastName, fields, tags }),
+    });
+
+    if (!updateResponse.ok) {
+      const error = await updateResponse.text();
+      throw new Error(`Systeme.io update failed ${updateResponse.status}: ${error}`);
+    }
+
+    return updateResponse.json();
   }
 
-  return response.json();
+  if (!createResponse.ok) {
+    const error = await createResponse.text();
+    throw new Error(`Systeme.io ${createResponse.status}: ${error}`);
+  }
+
+  return createResponse.json();
 }
 
 // ─── Resend Email Notification ────────────────────────────────────────────────
