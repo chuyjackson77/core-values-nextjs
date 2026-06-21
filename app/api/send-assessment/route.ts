@@ -97,7 +97,7 @@ async function upsertSystemeContact(
     console.log(`Systeme.io: updating existing contact ${existingId}`);
     const updateResponse = await fetch(`https://api.systeme.io/api/contacts/${existingId}`, {
       method: 'PATCH',
-      headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+      headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/merge-patch+json' },
       body: JSON.stringify({ email: userProfile.email, firstName, lastName, fields, tags }),
     });
 
