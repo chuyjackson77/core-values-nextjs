@@ -135,20 +135,42 @@ async function upsertSystemeContact(
 }
 
 // ─── Tag Application ─────────────────────────────────────────────────────────
-// PATCH doesn't apply tags — each tag must be added via its own POST request.
+// PATCH doesn't apply tags. Tags must be applied by tagId via a separate POST.
+// Step 1: look up all tags to find the numeric ID for each tag name.
+// Step 2: POST /api/contacts/{id}/tags with { tagId }.
 
 async function applyTags(apiKey: string, contactId: number, tags: { name: string }[]) {
+  // Fetch all tags to resolve names → IDs
+  const tagsListRes = await fetch('https://api.systeme.io/api/tags?limit=100', {
+    headers: { 'X-API-Key': apiKey },
+  });
+
+  if (!tagsListRes.ok) {
+    console.error(`Systeme.io: failed to fetch tags list: ${tagsListRes.status}`);
+    return;
+  }
+
+  const tagsListData = await tagsListRes.json();
+  const allTags: { id: number; name: string }[] = tagsListData?.items || [];
+
   for (const tag of tags) {
+    const match = allTags.find(t => t.name === tag.name);
+    if (!match) {
+      console.error(`Systeme.io: tag "${tag.name}" not found in account — skipping`);
+      continue;
+    }
+
     const res = await fetch(`https://api.systeme.io/api/contacts/${contactId}/tags`, {
       method: 'POST',
       headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: tag.name }),
+      body: JSON.stringify({ tagId: match.id }),
     });
+
     if (!res.ok) {
       const error = await res.text();
-      console.error(`Systeme.io: failed to apply tag "${tag.name}": ${res.status} ${error}`);
+      console.error(`Systeme.io: failed to apply tag "${tag.name}" (id ${match.id}): ${res.status} ${error}`);
     } else {
-      console.log(`Systeme.io: applied tag "${tag.name}" to contact ${contactId}`);
+      console.log(`Systeme.io: applied tag "${tag.name}" (id ${match.id}) to contact ${contactId}`);
     }
   }
 }
