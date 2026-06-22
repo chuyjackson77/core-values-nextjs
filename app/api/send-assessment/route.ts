@@ -93,12 +93,12 @@ async function upsertSystemeContact(
   const existingId = lookupData?.items?.[0]?.id;
 
   if (existingId) {
-    // Step 2a: Contact exists — update with latest assessment results
+    // Step 2a: Contact exists — update fields
     console.log(`Systeme.io: updating existing contact ${existingId}`);
     const updateResponse = await fetch(`https://api.systeme.io/api/contacts/${existingId}`, {
       method: 'PATCH',
       headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/merge-patch+json' },
-      body: JSON.stringify({ email: userProfile.email, firstName, lastName, fields, tags }),
+      body: JSON.stringify({ email: userProfile.email, firstName, lastName, fields }),
     });
 
     if (!updateResponse.ok) {
@@ -108,6 +108,10 @@ async function upsertSystemeContact(
 
     const updateData = await updateResponse.json();
     console.log('Systeme.io update response:', JSON.stringify(updateData));
+
+    // Step 2b: Apply tags separately — PATCH doesn't process tags
+    await applyTags(apiKey, existingId, tags);
+
     return 'updated';
 
   } else {
@@ -127,6 +131,25 @@ async function upsertSystemeContact(
     const createData = await createResponse.json();
     console.log('Systeme.io create response:', JSON.stringify(createData));
     return 'created';
+  }
+}
+
+// ─── Tag Application ─────────────────────────────────────────────────────────
+// PATCH doesn't apply tags — each tag must be added via its own POST request.
+
+async function applyTags(apiKey: string, contactId: number, tags: { name: string }[]) {
+  for (const tag of tags) {
+    const res = await fetch(`https://api.systeme.io/api/contacts/${contactId}/tags`, {
+      method: 'POST',
+      headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: tag.name }),
+    });
+    if (!res.ok) {
+      const error = await res.text();
+      console.error(`Systeme.io: failed to apply tag "${tag.name}": ${res.status} ${error}`);
+    } else {
+      console.log(`Systeme.io: applied tag "${tag.name}" to contact ${contactId}`);
+    }
   }
 }
 
